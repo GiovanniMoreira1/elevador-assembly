@@ -4,7 +4,7 @@
 ANDAR_ATUAL    EQU 10H
 ANDAR_DESTINO  EQU 11H
 DISPLAY_VALOR  EQU 12H
-LED_SUBIR 	   EQU P2.7
+LED_SUBIR 	   EQU P2.7 ; necessario alterar os pinos dos leds de P1 para P2
 LED_DESCER	   EQU P2.0
 MOTOR_B0	   EQU P3.0
 MOTOR_B1	   EQU P3.1
@@ -45,7 +45,7 @@ TECLADO:
 
     JMP SAIR
 
-colScan:
+colScan: ; escaneamento das colunas
     JNB P0.6, gotKey 
     INC R0
     JNB P0.5, gotKey 
@@ -80,10 +80,10 @@ TABELA_DISPLAY:
     DB 80H ; 8
     DB 98H ; 9
 
-MOSTRAR_DISPLAY:
-    MOV DPTR, #TABELA_DISPLAY
+MOSTRAR_DISPLAY: ; percorre a tabela com os codigos dos numeros para o display de 7 seg
+    MOV DPTR, #TABELA_DISPLAY 
     MOV A, DISPLAY_VALOR
-    MOVC A, @A+DPTR
+    MOVC A, @A+DPTR 
     MOV P1, A
     RET
 
@@ -99,32 +99,34 @@ MOVE_ELEV:
 	RET
 
 VERIFICAR:
-	CLR C
+	CLR C ; limpa o carry pra nao ter interferencia no subb
 	MOV A, ANDAR_DESTINO
-	SUBB A, ANDAR_ATUAL ; caso seja positivo, o programa chama a rotina subir (carry = 0), caso a subb resulte em negativo o carry eh ativado, portanto o DESCER eh chamado
-    JC DESCER
-    AJMP SUBIR
+	SUBB A, ANDAR_ATUAL ; a = andar_destino - andar_atual
+; subtrai o andar_destino do andar_atual, portanto, se destino > atual = elevador sobe (carry = 0)
+; se destino < atual = elevador desce (carry = 1)
+
+    JC DESCER ; chama a rotina se carry = 1 (atual > destino)
+    AJMP SUBIR ; rotina caso carry = 0 (atual < destino)
 
 SUBIR:
-	SETB MOTOR_B0
-	CLR MOTOR_B1
-	SETB LED_DESCER
-	CLR LED_SUBIR
+	SETB MOTOR_B0 ; bit0_motor = 1
+	CLR MOTOR_B1 ; bit1_motor = 0 -> sentido horario
+	SETB LED_DESCER 
+	CLR LED_SUBIR 
     INC ANDAR_ATUAL
-    MOV DISPLAY_VALOR, ANDAR_ATUAL
-    CALL MOSTRAR_DISPLAY
-	MOV R4, #120 ; tempo pro delay (achei aceitavel 120)
-    CALL DELAY
+    MOV DISPLAY_VALOR, ANDAR_ATUAL 
+    CALL MOSTRAR_DISPLAY ; mostra no display 7seg o andar atualizado após subir 1 andar
+	MOV R4, #120 ; delay
     SJMP MOVE_ELEV ; volta para verificar se chegou no destino
 
 DESCER:
-	CLR MOTOR_B0
-	SETB MOTOR_B1
+	CLR MOTOR_B0 ; bit0_motor = 0
+	SETB MOTOR_B1 ; bit1_motor = 1 -> sentido anti-horario
 	SETB LED_SUBIR
 	CLR LED_DESCER
     DEC ANDAR_ATUAL
     MOV DISPLAY_VALOR, ANDAR_ATUAL
-    CALL MOSTRAR_DISPLAY
+    CALL MOSTRAR_DISPLAY ; mostra no display 7seg o andar atualizado após descer 1 andar
     MOV R4, #120 ; delay
 	CALL DELAY
     SJMP MOVE_ELEV ; volta para verificar se chegou no destino
