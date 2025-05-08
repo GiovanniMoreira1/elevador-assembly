@@ -8,23 +8,54 @@ LED_SUBIR 	   EQU P2.7 ; necessário alterar os pinos dos LEDs de P1 para P2
 LED_DESCER	   EQU P2.0
 MOTOR_B0	   EQU P3.0 ; controla o sentido do motor - bit menos significativo
 MOTOR_B1	   EQU P3.1 ; controla o sentido do motor - bit mais significativo
+SW_EMERGENCIA  EQU P3.2
+LED_EMERG_5    EQU P2.5
+LED_EMERG_4    EQU P2.4
+LED_EMERG_3    EQU P2.3
+LED_EMERG_2    EQU P2.2
 
         ORG 0100H
 INICIO:
+    MOV ANDAR_ATUAL, #00H
+    MOV ANDAR_DESTINO, #00H
+    MOV DISPLAY_VALOR, #00H
+	SETB SW_EMERGENCIA ; por padrão ligado (normalmente fechado), se abrir o botão desliga (emergência)
 
 VOLTA:
+	SETB LED_EMERG_5
+	SETB LED_EMERG_4
+	SETB LED_EMERG_3
+	SETB LED_EMERG_2
+
+	JB SW_EMERGENCIA, CONTINUA ; se estiver ativado, continua normalmente
+	AJMP EMERGENCIA ; senão, vai pra emergência
+
+CONTINUA:
 	CALL TECLADO ; chama rotina que lê o teclado
     MOV A, ANDAR_ATUAL
     CJNE A, ANDAR_DESTINO, MOVE_ELEV ; compara andar atual e andar destino, se forem diferentes, chama a rotina MOVE_ELEV
-    CLR MOTOR_B0
+    CLR MOTOR_B0 ; zera os dois bits de direção do motor
 	CLR MOTOR_B1
-	SJMP VOLTA ; repete o processo
+	SJMP VOLTA
+
+EMERGENCIA:
+	SETB LED_SUBIR
+	SETB LED_DESCER
+	CLR LED_EMERG_5
+	CLR LED_EMERG_4
+	CLR LED_EMERG_3
+	CLR LED_EMERG_2
+
+	MOV B, 10H ; força os valores para o display aparecer algo (no caso, valor inválido de 16)
+	MOV 12H, B
+	MOV 11H, B
+	AJMP VOLTA
 
 TECLADO:
     MOV R0, #1 ; inicia com 1 para mapear as teclas
 
     ; scan row3
-    SETB P0.0 
+    SETB P0.0 ; ativa a linha
     CLR P0.3 
     CALL colScan 
 
@@ -46,7 +77,7 @@ TECLADO:
     JMP SAIR
 
 colScan: ; escaneamento das colunas
-    JNB P0.6, gotKey 
+    JNB P0.6, gotKey ; verifica se coluna está em 0, indicando tecla pressionada
     INC R0
     JNB P0.5, gotKey 
     INC R0
@@ -60,7 +91,7 @@ gotKey:
     SJMP setZero
 
 aguardaSoltar: ; espera a tecla ser solta
-    JB P0.4, SAIR
+    JB P0.4, SAIR ; espera até que a coluna fique em 1 de novo (tecla solta)
     SJMP aguardaSoltar
 
 setZero: ; se pressionar a tecla 11, define o destino como 0
@@ -83,7 +114,7 @@ TABELA_DISPLAY:
 MOSTRAR_DISPLAY: ; percorre a tabela com os códigos dos números para o display de 7 segmentos
     MOV DPTR, #TABELA_DISPLAY
     MOV A, DISPLAY_VALOR
-    MOVC A, @A+DPTR
+    MOVC A, @A+DPTR ; acessa o código correspondente ao valor
     MOV P1, A ; exibe o valor correspondente no display
     RET
 
@@ -101,35 +132,46 @@ MOVE_ELEV:
 VERIFICAR:
 	CLR C ; limpa o carry para não ter interferência no SUBB
 	MOV A, ANDAR_DESTINO
-	SUBB A, ANDAR_ATUAL ; subtrai o andar_destino do andar_atual, portanto:
+	SUBB A, ANDAR_ATUAL ; subtrai o andar_atual do andar_destino, portanto:
                          ; se destino > atual = elevador sobe (carry = 0)
                          ; se destino < atual = elevador desce (carry = 1)
     JC DESCER ; chama a rotina se carry = 1 (atual > destino)
     AJMP SUBIR ; rotina caso carry = 0 (atual < destino)
 
 SUBIR:
-	SETB MOTOR_B0 ; bit0_motor = 1
-	CLR MOTOR_B1 ; bit1_motor = 0 -> sentido horário
-	SETB LED_SUBIR ; acende LED indicando subida
-	CLR LED_DESCER ; apaga LED de descida
-    INC ANDAR_ATUAL ; incrementa o andar atual
+    SETB MOTOR_B0 ; ativa direção de subida
+    CLR MOTOR_B1
+    SETB LED_SUBIR
+    CLR LED_DESCER
+
+    ; VERIFICA SE FOI PRESSIONADO BOTÃO DE EMERGÊNCIA DURANTE O MOVIMENTO
+    JB SW_EMERGENCIA, SEGUE_SUBIDA ; se não apertou emergência, continua
+    AJMP EMERGENCIA
+
+SEGUE_SUBIDA:
+    INC ANDAR_ATUAL
     MOV DISPLAY_VALOR, ANDAR_ATUAL 
-    CALL MOSTRAR_DISPLAY ; mostra no display 7seg o andar atualizado após subir 1 andar
-	MOV R4, #120 ; delay
+    CALL MOSTRAR_DISPLAY
+    MOV R4, #120
     CALL DELAY
-    SJMP MOVE_ELEV ; volta para verificar se chegou no destino
+    SJMP MOVE_ELEV ; verifica novamente
 
 DESCER:
-	CLR MOTOR_B0 ; bit0_motor = 0
-	SETB MOTOR_B1 ; bit1_motor = 1 -> sentido anti-horário
-	SETB LED_DESCER ; acende LED indicando descida
-	CLR LED_SUBIR ; apaga LED de subida
-    DEC ANDAR_ATUAL ; decrementa o andar atual
+    CLR MOTOR_B0 ; ativa direção de descida
+    SETB MOTOR_B1
+    SETB LED_DESCER
+    CLR LED_SUBIR
+
+    JB SW_EMERGENCIA, SEGUE_DESCIDA ; se não apertou emergência, continua
+    AJMP EMERGENCIA
+
+SEGUE_DESCIDA:
+    DEC ANDAR_ATUAL
     MOV DISPLAY_VALOR, ANDAR_ATUAL
-    CALL MOSTRAR_DISPLAY ; mostra no display 7seg o andar atualizado após descer 1 andar
-    MOV R4, #120 ; delay
-	CALL DELAY
-    SJMP MOVE_ELEV ; volta para verificar se chegou no destino
+    CALL MOSTRAR_DISPLAY
+    MOV R4, #120
+    CALL DELAY
+    SJMP MOVE_ELEV ; verifica novamente
 
 SAIR:
     RET
