@@ -16,9 +16,6 @@ LED_EMERG_2    EQU P2.2
 
         ORG 0100H
 INICIO:
-    MOV ANDAR_ATUAL, #00H
-    MOV ANDAR_DESTINO, #00H
-    MOV DISPLAY_VALOR, #00H
 	SETB SW_EMERGENCIA ; por padrão ligado (normalmente fechado), se abrir o botão desliga (emergência)
 
 VOLTA:
@@ -96,7 +93,8 @@ aguardaSoltar: ; espera a tecla ser solta
 
 setZero: ; se pressionar a tecla 11, define o destino como 0
     MOV ANDAR_DESTINO, #00H
-    SJMP MOSTRAR_DISPLAY ; atualiza o display para mostrar o zero
+    MOV DISPLAY_VALOR, #00H
+    CALL MOSTRAR_DISPLAY
     RET
 
 TABELA_DISPLAY:
